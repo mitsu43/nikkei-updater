@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日経マップ データ更新ツール</title>
+<style>
+:root {
+  --bg: #0a0c10;
+  --surface: #12151c;
+  --surface2: #1a1e28;
+  --border: #252a38;
+  --accent: #3b82f6;
+  --accent2: #60a5fa;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --font: 'Noto Sans JP', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header h1 {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  color: var(--accent2);
+}
+header .subtitle { font-size: 12px; color: var(--muted); }
+
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 左：操作パネル */
+.panel {
+  width: 380px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.field-group { display: flex; flex-direction: column; gap: 8px; }
+.field-group label { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+select, input[type=date], input[type=text] {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color .15s;
+}
+select:focus, input:focus { border-color: var(--accent); }
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--surface2);
+}
+.drop-zone:hover, .drop-zone.over {
+  border-color: var(--accent);
+  background: rgba(59,130,246,.08);
+}
+.drop-zone .icon { font-size: 28px; margin-bottom: 8px; }
+.drop-zone .hint { font-size: 12px; color: var(--muted); }
+.drop-zone .file-name { font-size: 13px; color: var(--accent2); font-weight: 700; margin-top: 6px; }
+
+.btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #2563eb; }
+.btn-primary:disabled { background: var(--border); color: var(--muted); cursor: default; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #16a34a; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-outline {
+  background: transparent;
+  color: var(--accent2);
+  border: 1px solid var(--border);
+}
+.btn-outline:hover { border-color: var(--accent); background: rgba(59,130,246,.08); }
+
+/* 右：プレビュー */
+.preview {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.preview-header {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.preview-header h2 { font-size: 13px; font-weight: 700; }
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.badge.ok { background: rgba(34,197,94,.15); border-color: var(--success); color: var(--success); }
+.badge.warn { background: rgba(245,158,11,.15); border-color: var(--warning); color: var(--warning); }
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+th {
+  background: var(--surface);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: .05em;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.4;
+}
+tr:hover td { background: var(--surface2); }
+.col-no { width: 48px; color: var(--muted); font-weight: 700; }
+.col-ed { width: 70px; }
+.col-cat { width: 100px; color: var(--accent2); }
+.col-men { width: 50px; color: var(--muted); }
+.col-title { max-width: 300px; }
+.col-loc { width: 120px; color: var(--muted); font-size: 11px; }
+.ed-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.ed-morning  { background: rgba(59,130,246,.2);  color: #93c5fd; }
+.ed-evening  { background: rgba(239,68,68,.2);   color: #fca5a5; }
+.ed-regional { background: rgba(34,197,94,.2);   color: #86efac; }
+.ed-plusone  { background: rgba(168,85,247,.2);  color: #d8b4fe; }
+
+/* ログ */
+.log {
+  height: 140px;
+  background: #060810;
+  border-top: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 10px 16px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.log .info  { color: var(--accent2); }
+.log .ok    { color: var(--success); }
+.log .warn  { color: var(--warning); }
+.log .err   { color: var(--danger); }
+
+/* 統計 */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.stat-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.stat-card .num { font-size: 20px; font-weight: 900; color: var(--accent2); }
+.stat-card .lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+.divider { border: none; border-top: 1px solid var(--border); }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📰 日経マップ データ更新ツール</h1>
+    <div class="subtitle">Excelファイルを読み込んで data.json を生成します</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;">
+    <button class="btn btn-outline" style="width:auto;padding:6px 14px;" onclick="loadExistingJson()">📂 既存JSON読み込み</button>
+    <button class="btn btn-success" style="width:auto;padding:6px 14px;" onclick="downloadJson()" id="downloadBtn" disabled>⬇ data.json ダウンロード</button>
+  </div>
+</header>
+
+<div class="main">
+  <!-- 左パネル -->
+  <div class="panel">
+
+    <div>
+      <div class="section-title">① Excelファイルを追加</div>
+      <div class="field-group">
+        <label>日付</label>
+        <input type="date" id="dateInput">
+      </div>
+      <div style="height:10px"></div>
+      <div class="field-group">
+        <label>版区分（M列がない場合のデフォルト）</label>
+        <select id="editionSelect">
+          <option value="morning">朝刊</option>
+          <option value="evening">夕刊</option>
+          <option value="regional">地方版</option>
+          <option value="plusone">プラスワン</option>
+          <option value="weekly">週刊</option>
+          <option value="saturday">土曜版</option>
+        </select>
+      </div>
+      <div style="height:12px"></div>
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">📊</div>
+        <div class="hint">クリックまたはドラッグ＆ドロップ</div>
+        <div class="hint">.xlsx ファイル</div>
+        <div class="file-name" id="fileName"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx" style="display:none" onchange="onFileSelect(this.files[0])">
+      <div style="height:10px"></div>
+      <button class="btn btn-primary" id="addBtn" onclick="addArticles()" disabled>＋ 記事を追加</button>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-title">② 状況</div>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="num" id="statTotal">0</div>
+          <div class="lbl">総記事数</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" id="statDates">0</div>
+          <div class="lbl">日付数</div>
+        </div>
+        <div class="stat-card">
+          <div class="num" id="statSize">0KB</div>
+          <div class="lbl">JSONサイズ</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-title">③ 日付別削除</div>
+      <div class="field-group">
+        <label>削除する日付</label>
+        <select id="deleteDateSelect"><option value="">-- 選択 --</option></select>
+      </div>
+      <div class="field-group">
+        <label>削除する版</label>
+        <select id="deleteEdSelect">
+          <option value="all">すべての版</option>
+          <option value="morning">朝刊</option>
+          <option value="evening">夕刊</option>
+          <option value="regional">地方版</option>
+          <option value="plusone">プラスワン</option>
+        </select>
+      </div>
+      <div style="height:8px"></div>
+      <button class="btn btn-danger" onclick="deleteArticles()">🗑 削除</button>
+    </div>
+
+  </div>
+
+  <!-- 右：プレビュー -->
+  <div class="preview">
+    <div class="preview-header">
+      <h2>プレビュー</h2>
+      <span class="badge" id="previewBadge">0件</span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <label style="font-size:12px;color:var(--muted);">絞り込み：</label>
+        <select id="filterDate" onchange="renderPreview()" style="width:100px;padding:4px 6px;">
+          <option value="">全日付</option>
+        </select>
+        <select id="filterEd" onchange="renderPreview()" style="width:90px;padding:4px 6px;">
+          <option value="">全版</option>
+          <option value="morning">朝刊</option>
+          <option value="evening">夕刊</option>
+          <option value="regional">地方版</option>
+          <option value="plusone">プラスワン</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="previewTable">
+        <thead>
+          <tr>
+            <th class="col-no">No</th>
+            <th class="col-ed">版</th>
+            <th class="col-cat">ジャンル</th>
+            <th class="col-men">面</th>
+            <th class="col-title">見出し</th>
+            <th class="col-loc">地名</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+    <div class="log" id="log"><span class="info">準備完了。Excelファイルを選択してください。</span><br></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let allArticles = [];
+let selectedFile = null;
+
+const ED_MAP = {
+  '朝刊':'morning','夕刊':'evening','地方版':'regional',
+  'プラスワン':'plusone','週刊':'weekly','土曜版':'saturday'
+};
+const ED_LABEL = {
+  morning:'朝刊', evening:'夕刊', regional:'地方版',
+  plusone:'プラスワン', weekly:'週刊', saturday:'土曜版'
+};
+
+// 今日の日付をデフォルト設定
+document.getElementById('dateInput').value = new Date().toISOString().slice(0,10);
+
+// ── ログ ──
+function log(msg, type='info'){
+  const el = document.getElementById('log');
+  el.innerHTML += `<span class="${type}">${msg}</span><br>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── ファイル選択 ──
+function onFileSelect(file){
+  if(!file) return;
+  selectedFile = file;
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('addBtn').disabled = false;
+  log(`📂 ファイル選択: ${file.name}`);
+}
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault(); dropZone.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if(f?.name.endsWith('.xlsx')){ onFileSelect(f); document.getElementById('fileInput').files; }
+});
+
+// ── Excel解析 ──
+function parseExcel(file, date, defaultEd){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const wb = XLSX.read(e.target.result, {type:'binary'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1});
+        if(rows.length < 2){ reject('データが空です'); return; }
+
+        const header = rows[0].map(h=>String(h||''));
+        const dataRows = rows.slice(1);
+
+        // 列インデックス検出
+        const fi = (keywords, excludes=[]) => {
+          return header.findIndex(h=>
+            keywords.some(k=>h.includes(k)) &&
+            !excludes.some(k=>h.includes(k))
+          );
+        };
+        const NO  = fi(['No','no','NO']);
+        const CAT = fi(['ジャンル','カテゴリ','分類']);
+        const MEN = fi(['ページ','PDFページ','面']);
+        const TTL = fi(['見出し','タイトル']);
+        const NAI = fi(['内容']);
+        const OMW = fi(['思惑']);
+        const RIK = fi(['理解すべき']);
+        const QQ  = fi(['クイズ（問','クイズ(問']);
+        const QA  = fi(['クイズ（解','クイズ(解']);
+        const QK  = fi(['キーワード解説'],['キーワード解説']);
+        const LOC = fi(['地図']);
+        const EDC = fi(['版種','区分']);
+
+        const maxId = allArticles.length > 0 ? Math.max(...allArticles.map(a=>a.id)) : 0;
+        const arts = [];
+        let idCounter = maxId;
+
+        dataRows.forEach(row=>{
+          const no = row[NO];
+          if(no === undefined || no === null || no === '') return;
+          const noInt = parseInt(no);
+          if(isNaN(noInt)) return;
+
+          const edJp = EDC >= 0 ? String(row[EDC]||'').trim() : '';
+          const edition = ED_MAP[edJp] || defaultEd;
+
+          const locStr = LOC >= 0 ? String(row[LOC]||'') : '';
+          let lat=35.6895, lng=139.6917, place='日本';
+          try{
+            const locClean = locStr.trim();
+            if(locClean.startsWith('{')){
+              const locData = JSON.parse(locClean);
+              lat   = parseFloat(locData.latitude  || lat);
+              lng   = parseFloat(locData.longitude || lng);
+              place = locData.location || place;
+            } else {
+              const lam = locStr.match(/"latitude":\s*([\-\d.]+)/);
+              const lom = locStr.match(/"longitude":\s*([\-\d.]+)/);
+              const lpm = locStr.match(/"location":\s*"([^"]+)"/);
+              if(lam) lat=parseFloat(lam[1]);
+              if(lom) lng=parseFloat(lom[1]);
+              if(lpm) place=lpm[1];
+            }
+          }catch(e){}
+
+          const menRaw = MEN>=0 ? String(row[MEN]||'') : '';
+          const men = menRaw.replace(/(\d+)\.0+/g, '$1');
+
+          idCounter++;
+          const dateKey = date.replace(/-/g, '/').replace(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/, (_,y,m,d)=>`${parseInt(m)}/${parseInt(d)}`);
+
+          arts.push({
+            id: idCounter,
+            no: noInt,
+            cat: CAT>=0 ? String(row[CAT]||'') : '',
+            men,
+            title: TTL>=0 ? String(row[TTL]||'') : '',
+            place, lat, lng,
+            '内容': NAI>=0 ? String(row[NAI]||'') : '',
+            '思惑': OMW>=0 ? String(row[OMW]||'') : '',
+            '理解': RIK>=0 ? String(row[RIK]||'') : '',
+            quiz_q: QQ>=0 ? String(row[QQ]||'') : '',
+            quiz_a: QA>=0 ? String(row[QA]||'') : '',
+            quiz_kaisetsu: QK>=0 ? String(row[QK]||'') : '',
+            '検索KW': '', kws: [],
+            date: dateKey, edition,
+            gid: `${dateKey}_${edition}_${noInt}`
+          });
+        });
+
+        resolve(arts);
+      }catch(err){ reject(err.message); }
+    };
+    reader.readAsBinaryString(file);
+  });
+}
+
+// ── 記事追加 ──
+async function addArticles(){
+  if(!selectedFile) return;
+  const dateVal = document.getElementById('dateInput').value;
+  const defaultEd = document.getElementById('editionSelect').value;
+
+  if(!dateVal){ alert('日付を選択してください'); return; }
+
+  log(`⏳ 解析中: ${selectedFile.name}...`);
+  try{
+    const arts = await parseExcel(selectedFile, dateVal, defaultEd);
+    if(!arts.length){ log('⚠ 記事が見つかりませんでした', 'warn'); return; }
+
+    // 同じ日付+版の既存データを削除して差し替え
+    const editions = [...new Set(arts.map(a=>a.edition))];
+    const dateKey = arts[0].date;
+    const before = allArticles.length;
+    allArticles = allArticles.filter(a=>!(a.date===dateKey && editions.includes(a.edition)));
+    const removed = before - allArticles.length;
+
+    // IDを振り直し
+    const maxId = allArticles.length > 0 ? Math.max(...allArticles.map(a=>a.id)) : 0;
+    arts.forEach((a,i)=>{ a.id = maxId + i + 1; });
+
+    allArticles = allArticles.concat(arts);
+
+    log(`✅ ${dateKey} ${editions.map(e=>ED_LABEL[e]).join('+')} → ${arts.length}件追加${removed>0?`（${removed}件差し替え）`:''}`, 'ok');
+    updateStats();
+    renderPreview();
+    updateDateSelects();
+
+    // ファイルリセット
+    selectedFile = null;
+    document.getElementById('fileName').textContent = '';
+    document.getElementById('addBtn').disabled = true;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('downloadBtn').disabled = false;
+
+  }catch(err){
+    log(`❌ エラー: ${err}`, 'err');
+  }
+}
+
+// ── 既存JSON読み込み ──
+function loadExistingJson(){
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = e=>{
+    const f = e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        allArticles = Array.isArray(data) ? data : (data.articles || []);
+        log(`✅ 既存JSON読み込み: ${allArticles.length}件`, 'ok');
+        updateStats(); renderPreview(); updateDateSelects();
+        document.getElementById('downloadBtn').disabled = false;
+      }catch(e){ log(`❌ JSON解析エラー: ${e.message}`, 'err'); }
+    };
+    reader.readAsText(f);
+  };
+  input.click();
+}
+
+// ── 削除 ──
+function deleteArticles(){
+  const date = document.getElementById('deleteDateSelect').value;
+  const ed   = document.getElementById('deleteEdSelect').value;
+  if(!date){ alert('削除する日付を選択してください'); return; }
+  const before = allArticles.length;
+  if(ed === 'all'){
+    allArticles = allArticles.filter(a=>a.date!==date);
+  } else {
+    allArticles = allArticles.filter(a=>!(a.date===date && a.edition===ed));
+  }
+  const removed = before - allArticles.length;
+  log(`🗑 ${date}${ed!=='all'?' '+ED_LABEL[ed]:''}: ${removed}件削除`, 'warn');
+  updateStats(); renderPreview(); updateDateSelects();
+}
+
+// ── ダウンロード ──
+function downloadJson(){
+  const blob = new Blob([JSON.stringify(allArticles)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data.json';
+  a.click();
+  log('⬇ data.json ダウンロード完了', 'ok');
+}
+
+// ── 統計更新 ──
+function updateStats(){
+  document.getElementById('statTotal').textContent = allArticles.length.toLocaleString();
+  const dates = new Set(allArticles.map(a=>a.date));
+  document.getElementById('statDates').textContent = dates.size;
+  const kb = Math.round(JSON.stringify(allArticles).length / 1024);
+  document.getElementById('statSize').textContent = kb > 1024 ? `${(kb/1024).toFixed(1)}MB` : `${kb}KB`;
+}
+
+// ── 日付セレクト更新 ──
+function updateDateSelects(){
+  const dates = [...new Set(allArticles.map(a=>a.date))].sort((a,b)=>{
+    const pa=a.split('/').map(Number), pb=b.split('/').map(Number);
+    return (pa[0]-pb[0])||((pa[1]||0)-(pb[1]||0));
+  });
+
+  const delSel = document.getElementById('deleteDateSelect');
+  delSel.innerHTML = '<option value="">-- 選択 --</option>';
+  dates.reverse().forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; delSel.appendChild(o); });
+
+  const filterSel = document.getElementById('filterDate');
+  const cur = filterSel.value;
+  filterSel.innerHTML = '<option value="">全日付</option>';
+  dates.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; filterSel.appendChild(o); });
+  if(cur) filterSel.value = cur;
+}
+
+// ── プレビュー描画 ──
+function renderPreview(){
+  const dateF = document.getElementById('filterDate').value;
+  const edF   = document.getElementById('filterEd').value;
+  let arts = allArticles;
+  if(dateF) arts = arts.filter(a=>a.date===dateF);
+  if(edF)   arts = arts.filter(a=>a.edition===edF);
+
+  // 最新100件
+  const show = arts.slice(-200).reverse();
+
+  const badge = document.getElementById('previewBadge');
+  badge.textContent = `${arts.length.toLocaleString()}件`;
+  badge.className = 'badge ' + (arts.length > 0 ? 'ok' : 'warn');
+
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = show.map(a=>`
+    <tr>
+      <td class="col-no">${a.no}</td>
+      <td class="col-ed"><span class="ed-tag ed-${a.edition}">${ED_LABEL[a.edition]||a.edition}</span></td>
+      <td class="col-cat">${a.cat||'-'}</td>
+      <td class="col-men">${a.men||'-'}</td>
+      <td class="col-title">${a.title||'-'}</td>
+      <td class="col-loc">${a.place||'-'}</td>
+    </tr>
+  `).join('');
+}
+
+updateStats();
+</script>
+</body>
+</html>
